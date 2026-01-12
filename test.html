@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Analisis EOQ - Intelligent Inventory</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js untuk Visualisasi Data -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Font Awesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Loading Animation for AI Simulation */
+        .ai-loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Hide sections initially */
+        .section-content { display: none; }
+        .section-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Toast Notification */
+        #toast-container {
+            position: fixed; top: 20px; right: 20px; z-index: 50;
+        }
+        .toast {
+            background: white; padding: 16px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            margin-bottom: 10px; display: flex; align-items: center; border-left: 4px solid;
+            animation: slideIn 0.3s ease-out forwards;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    </style>
+</head>
+<body class="text-gray-800 h-screen overflow-hidden flex flex-col">
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- LOGIN PAGE -->
+    <section id="login-section" class="fixed inset-0 bg-gray-100 z-40 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-200">
+            <div class="text-center mb-6">
+                <div class="bg-blue-600 w-16 h-16 rounded-lg flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                    <i class="fa-solid fa-cube"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">EOQ Inventory System</h1>
+                <p class="text-gray-500 text-sm mt-1">Masuk untuk mengelola persediaan</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input type="text" id="username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="admin / karyawan" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="123456" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-200">
+                    Masuk
+                </button>
+            </form>
+            <div class="mt-4 text-xs text-center text-gray-400">
+                <p>Demo Admin: admin / 123456</p>
+                <p>Demo Karyawan: karyawan / 123456</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- MAIN APP LAYOUT -->
+    <div id="app-layout" class="flex h-full hidden">
+        
+        <!-- SIDEBAR -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300" id="sidebar">
+            <div class="h-16 flex items-center justify-center border-b border-slate-800 bg-slate-950">
+                <span class="font-bold text-xl text-white tracking-wide"><i class="fa-solid fa-boxes-stacked mr-2"></i>EOQ SYS</span>
+            </div>
+            
+            <nav class="flex-1 overflow-y-auto py-4">
+                <ul class="space-y-1 px-3">
+                    <li>
+                        <button onclick="navTo('dashboard')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group active-nav">
+                            <i class="fa-solid fa-chart-line w-6 group-hover:text-blue-400"></i> Beranda
+                        </button>
+                    </li>
+                    
+                    <li class="mt-4 mb-2 px-4 text-xs uppercase font-bold text-slate-500">Manajemen Stok</li>
+                    <li>
+                        <button onclick="navTo('manage-items')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-box w-6 group-hover:text-blue-400"></i> Kelola Barang
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="navTo('manage-distributors')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-truck w-6 group-hover:text-blue-400"></i> Distributor
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="navTo('stock-levels')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-warehouse w-6 group-hover:text-blue-400"></i> Jumlah Stok
+                        </button>
+                    </li>
+                    
+                    <li class="mt-4 mb-2 px-4 text-xs uppercase font-bold text-slate-500">Transaksi</li>
+                    <li>
+                        <button onclick="navTo('stock-in')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-arrow-right-to-bracket w-6 group-hover:text-green-400"></i> Barang Masuk
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="navTo('stock-out')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-arrow-right-from-bracket w-6 group-hover:text-red-400"></i> Barang Keluar
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="navTo('sales')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-cash-register w-6 group-hover:text-yellow-400"></i> Penjualan
+                        </button>
+                    </li>
+
+                    <li class="mt-4 mb-2 px-4 text-xs uppercase font-bold text-slate-500">Analisis AI</li>
+                    <li>
+                        <button onclick="navTo('optimization')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-brain w-6 group-hover:text-purple-400"></i> Optimasi EOQ
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="navTo('reports')" class="nav-item w-full text-left px-4 py-3 rounded-lg hover:bg-slate-800 hover:text-white transition flex items-center group">
+                            <i class="fa-solid fa-file-invoice w-6 group-hover:text-blue-400"></i> Laporan
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold" id="user-avatar">A</div>
+                    <div>
+                        <p class="text-sm font-medium text-white" id="user-name-display">Admin User</p>
+                        <p class="text-xs text-slate-500" id="user-role-display">Administrator</p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-800 rounded-lg transition">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTENT AREA -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden bg-gray-50">
+            
+            <!-- HEADER -->
+            <header class="h-16 bg-white shadow-sm flex items-center justify-between px-8 z-10">
+                <h2 id="page-title" class="text-xl font-bold text-gray-800">Beranda</h2>
+                <div class="flex items-center gap-4">
+                    <button class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition relative">
+                        <i class="fa-solid fa-bell"></i>
+                        <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+                    <button onclick="navTo('profile')" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- SCROLLABLE CONTENT -->
+            <div class="flex-1 overflow-y-auto p-8 relative">
+                
+                <!-- 1. DASHBOARD (BERANDA) -->
+                <div id="dashboard" class="section-content active">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Total Barang</p>
+                                    <h3 class="text-2xl font-bold text-gray-800" id="dash-total-items">0</h3>
+                                </div>
+                                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-box"></i></div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Nilai Stok</p>
+                                    <h3 class="text-2xl font-bold text-gray-800" id="dash-stock-value">Rp 0</h3>
+                                </div>
+                                <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fa-solid fa-sack-dollar"></i></div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Transaksi Bulan Ini</p>
+                                    <h3 class="text-2xl font-bold text-gray-800">128</h3>
+                                </div>
+                                <div class="p-3 bg-purple-50 text-purple-600 rounded-lg"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Barang Rendah</p>
+                                    <h3 class="text-2xl font-bold text-red-600">2</h3>
+                                </div>
+                                <div class="p-3 bg-red-50 text-red-600 rounded-lg"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-bold text-gray-700 mb-4">Aktivitas Transaksi Terakhir</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-3">Tanggal</th>
+                                            <th class="px-4 py-3">Barang</th>
+                                            <th class="px-4 py-3">Tipe</th>
+                                            <th class="px-4 py-3">Jumlah</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dash-recent-transactions">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
+                            <div class="mb-4 text-blue-600 text-5xl"><i class="fa-solid fa-robot"></i></div>
+                            <h3 class="font-bold text-gray-800 text-lg">Sistem Optimasi Siap</h3>
+                            <p class="text-gray-500 text-sm mt-2">Gunakan menu <span class="font-semibold text-blue-600">Optimasi EOQ</span> untuk menghitung jumlah pemesanan ekonomis menggunakan model komputasi.</p>
+                            <button onclick="navTo('optimization')" class="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">Mulai Analisis</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. KELOLA BARANG -->
+                <div id="manage-items" class="section-content">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="relative">
+                            <input type="text" placeholder="Cari barang..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <i class="fa-solid fa-search absolute left-3 top-3 text-gray-400"></i>
+                        </div>
+                        <button onclick="openModal('modal-add-item')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Tambah Barang
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <table class="w-full text-sm text-left text-gray-600">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-3">Kode</th>
+                                    <th class="px-6 py-3">Nama Barang</th>
+                                    <th class="px-6 py-3">Permintaan (D)</th>
+                                    <th class="px-6 py-3">Biaya Pesan (S)</th>
+                                    <th class="px-6 py-3">Biaya Simpan (H)</th>
+                                    <th class="px-6 py-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="items-table-body">
+                                <!-- JS Populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 3. DISTRIBUTOR & STOK (Simplified for Prototype) -->
+                <div id="manage-distributors" class="section-content">
+                    <div class="p-12 text-center bg-white rounded-xl border border-dashed border-gray-300">
+                        <i class="fa-solid fa-truck-fast text-4xl text-gray-300 mb-4"></i>
+                        <h3 class="text-lg font-bold text-gray-700">Manajemen Distributor</h3>
+                        <p class="text-gray-500">Antarmuka untuk mengelola data supplier (Simulasi).</p>
+                    </div>
+                </div>
+
+                <div id="stock-levels" class="section-content">
+                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="font-bold text-gray-700 mb-4">Status Stok Gudang</h3>
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 border-b"><tr><th class="p-3">Barang</th><th class="p-3">Stok Saat Ini</th><th class="p-3">Status</th></tr></thead>
+                            <tbody id="stock-level-body">
+                                <!-- JS -->
+                            </tbody>
+                        </table>
+                     </div>
+                </div>
+
+                <!-- 4. TRANSAKSI (Masuk/Keluar) -->
+                <div id="stock-in" class="section-content">
+                    <div class="max-w-lg mx-auto bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <h3 class="text-xl font-bold mb-6 text-green-600"><i class="fa-solid fa-arrow-down"></i> Input Barang Masuk</h3>
+                        <form id="form-stock-in" onsubmit="handleTransaction(event, 'in')">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Pilih Barang</label>
+                                    <select id="in-item-select" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Jumlah Masuk</label>
+                                    <input type="number" id="in-qty" min="1" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Catatan</label>
+                                    <textarea id="in-note" class="w-full mt-1 p-2 border border-gray-300 rounded-lg"></textarea>
+                                </div>
+                                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-medium">Simpan Transaksi</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="stock-out" class="section-content">
+                    <div class="max-w-lg mx-auto bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <h3 class="text-xl font-bold mb-6 text-red-600"><i class="fa-solid fa-arrow-up"></i> Input Barang Keluar</h3>
+                        <form id="form-stock-out" onsubmit="handleTransaction(event, 'out')">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Pilih Barang</label>
+                                    <select id="out-item-select" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Jumlah Keluar</label>
+                                    <input type="number" id="out-qty" min="1" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium">Simpan Transaksi</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div id="sales" class="section-content">
+                    <div class="p-12 text-center bg-white rounded-xl border border-dashed border-gray-300">
+                        <i class="fa-solid fa-cash-register text-4xl text-gray-300 mb-4"></i>
+                        <h3 class="text-lg font-bold text-gray-700">Kasir Penjualan</h3>
+                        <p class="text-gray-500">Antarmuka kasir point-of-sale (Simulasi).</p>
+                    </div>
+                </div>
+
+                <!-- 5. OPTIMASI EOQ (The Core Feature) -->
+                <div id="optimization" class="section-content">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <!-- Input Section -->
+                        <div class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-fit">
+                            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders"></i> Parameter EOQ
+                            </h3>
+                            <form id="eoq-form" onsubmit="runEOQ(event)">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Pilih Produk</label>
+                                        <select id="opt-item-select" onchange="loadItemParams()" class="w-full mt-1 p-2 border border-gray-300 rounded-lg bg-gray-50" required>
+                                            <option value="">-- Pilih Barang --</option>
+                                        </select>
+                                        <p class="text-xs text-gray-500 mt-1">Data akan diisi otomatis dari database barang.</p>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Permintaan (D)</label>
+                                            <input type="number" id="opt-d" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                                            <span class="text-xs text-gray-500">unit/tahun</span>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Biaya Pesan (S)</label>
+                                            <input type="number" id="opt-s" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                                            <span class="text-xs text-gray-500">Rp / pesan</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Biaya Simpan (H)</label>
+                                        <input type="number" id="opt-h" required class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                                        <span class="text-xs text-gray-500">Rp / unit / tahun</span>
+                                    </div>
+
+                                    <div class="pt-4 border-t border-gray-100">
+                                        <div class="flex items-center gap-2 mb-2 text-sm text-gray-600 bg-blue-50 p-2 rounded">
+                                            <i class="fa-solid fa-microchip text-blue-600"></i>
+                                            <span>Engine: TensorFlow.js (Simulated)</span>
+                                        </div>
+                                        <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3 rounded-lg font-bold shadow-lg transform transition hover:-translate-y-0.5">
+                                            <i class="fa-solid fa-calculator mr-2"></i> Hitung Optimasi
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Result Section -->
+                        <div class="lg:col-span-7 space-y-6">
+                            <!-- Loading State -->
+                            <div id="eoq-loading" class="hidden bg-white p-10 rounded-xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center h-full">
+                                <div class="ai-loader mb-4"></div>
+                                <h4 class="font-bold text-lg text-gray-800">Memproses Model...</h4>
+                                <p class="text-gray-500 text-sm">Komputasi algoritma EOQ dan meminimalkan fungsi biaya total.</p>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div id="eoq-empty" class="bg-white p-10 rounded-xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center h-96">
+                                <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-gray-400 text-2xl">
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                </div>
+                                <h4 class="font-bold text-gray-700">Belum ada perhitungan</h4>
+                                <p class="text-gray-500 text-sm max-w-xs mx-auto mt-2">Masukkan parameter barang di sebelah kiri dan klik "Hitung Optimasi" untuk melihat hasil analisis EOQ.</p>
+                            </div>
+
+                            <!-- Results -->
+                            <div id="eoq-results" class="hidden space-y-6">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div class="bg-white p-4 rounded-xl shadow-sm border border-blue-100 border-l-4 border-l-blue-500">
+                                        <p class="text-xs text-gray-500 uppercase font-bold">EOQ Optimal (Q)</p>
+                                        <h3 class="text-2xl font-bold text-gray-800" id="res-q">0</h3>
+                                        <p class="text-xs text-gray-400">Unit per pesanan</p>
+                                    </div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                                        <p class="text-xs text-gray-500 uppercase font-bold">Total Biaya (TC)</p>
+                                        <h3 class="text-xl font-bold text-red-600" id="res-tc">Rp 0</h3>
+                                        <p class="text-xs text-gray-400">Tahunan</p>
+                                    </div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                                        <p class="text-xs text-gray-500 uppercase font-bold">Frekuensi Pesan</p>
+                                        <h3 class="text-xl font-bold text-gray-800" id="res-freq">0</h3>
+                                        <p class="text-xs text-gray-400">Kali per tahun</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                        <h4 class="font-bold text-gray-700 mb-4">Rincian Biaya</h4>
+                                        <div class="space-y-3">
+                                            <div class="flex justify-between items-center text-sm">
+                                                <span class="text-gray-600">Holding Cost (Penyimpanan)</span>
+                                                <span class="font-semibold text-gray-800" id="res-hc">Rp 0</span>
+                                            </div>
+                                            <div class="flex justify-between items-center text-sm">
+                                                <span class="text-gray-600">Ordering Cost (Pemesanan)</span>
+                                                <span class="font-semibold text-gray-800" id="res-oc">Rp 0</span>
+                                            </div>
+                                            <div class="border-t border-gray-100 pt-2 flex justify-between items-center">
+                                                <span class="font-bold text-gray-800">Total</span>
+                                                <span class="font-bold text-lg text-blue-600" id="res-tc-dup">Rp 0</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col">
+                                        <h4 class="font-bold text-gray-700 mb-2">Grafik Komponen Biaya</h4>
+                                        <div class="flex-1 relative h-40">
+                                            <canvas id="eoqChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. LAPORAN -->
+                <div id="reports" class="section-content">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-gray-800">Laporan Persediaan & Transaksi</h3>
+                            <button onclick="window.print()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded"><i class="fa-solid fa-print mr-1"></i> Cetak</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left text-gray-600">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                                    <tr>
+                                        <th class="px-4 py-3">ID</th>
+                                        <th class="px-4 py-3">Waktu</th>
+                                        <th class="px-4 py-3">Barang</th>
+                                        <th class="px-4 py-3">Tipe</th>
+                                        <th class="px-4 py-3">Jumlah</th>
+                                        <th class="px-4 py-3">Keterangan</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-table-body">
+                                    <!-- JS Populated -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7. PROFILE & EMPLOYEES (Simplified) -->
+                <div id="profile" class="section-content">
+                    <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div class="flex items-center gap-6 mb-8">
+                            <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-3xl text-blue-600 font-bold">A</div>
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-800">Administrator</h2>
+                                <p class="text-gray-500">Role: Admin</p>
+                            </div>
+                        </div>
+                        <form class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Username</label>
+                                <input type="text" value="admin" disabled class="w-full mt-1 p-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Password Baru</label>
+                                <input type="password" placeholder="Kosongkan jika tidak ingin mengganti" class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <button type="button" onclick="showToast('Password berhasil diperbarui', 'success')" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Simpan Perubahan</button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL ADD ITEM -->
+    <div id="modal-add-item" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl w-full max-w-lg p-6 m-4 shadow-2xl">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Barang Baru</h3>
+            <form id="form-add-item" onsubmit="addItem(event)">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Nama Barang</label>
+                        <input type="text" id="add-name" required class="w-full border border-gray-300 rounded p-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Permintaan (D)</label>
+                        <input type="number" id="add-d" required class="w-full border border-gray-300 rounded p-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Biaya Pesan (S)</label>
+                        <input type="number" id="add-s" required class="w-full border border-gray-300 rounded p-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Biaya Simpan (H)</label>
+                        <input type="number" id="add-h" required class="w-full border border-gray-300 rounded p-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Stok Awal</label>
+                        <input type="number" id="add-stock" value="0" class="w-full border border-gray-300 rounded p-2">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-add-item')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- DATA SIMULATION (Database) ---
+        const defaultItems = [
+            { id: 1, code: 'BRG-001', name: 'Contoh Barang (Dari Prompt)', d: 10000, s: 150000, h: 3000, stock: 500 },
+            { id: 2, code: 'BRG-002', name: 'Baut Baja 10mm', d: 5000, s: 50000, h: 1000, stock: 200 },
+            { id: 3, code: 'BRG-003', name: 'Oli Mesin Drum', d: 1200, s: 200000, h: 50000, stock: 50 }
+        ];
+
+        let items = JSON.parse(localStorage.getItem('eoq_items')) || defaultItems;
+        let transactions = JSON.parse(localStorage.getItem('eoq_transactions')) || [];
+        let currentUser = null;
+
+        // --- AUTH SYSTEM ---
+        const loginForm = document.getElementById('login-form');
+        const loginSection = document.getElementById('login-section');
+        const appLayout = document.getElementById('app-layout');
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+
+            if (u === 'admin' && p === '123456') {
+                login({ name: 'Administrator', role: 'admin', avatar: 'A' });
+            } else if (u === 'karyawan' && p === '123456') {
+                login({ name: 'Staf Gudang', role: 'karyawan', avatar: 'K' });
+            } else {
+                showToast('Username atau password salah!', 'error');
+            }
+        });
+
+        function login(user) {
+            currentUser = user;
+            document.getElementById('user-name-display').textContent = user.name;
+            document.getElementById('user-role-display').textContent = user.role === 'admin' ? 'Administrator' : 'Karyawan';
+            document.getElementById('user-avatar').textContent = user.avatar;
+            
+            loginSection.classList.add('hidden');
+            appLayout.classList.remove('hidden');
+            appLayout.classList.add('flex');
+            
+            initApp();
+        }
+
+        function logout() {
+            currentUser = null;
+            appLayout.classList.add('hidden');
+            appLayout.classList.remove('flex');
+            loginSection.classList.remove('hidden');
+        }
+
+        // --- NAVIGATION ---
+        function navTo(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('bg-slate-800', 'text-white'));
+            
+            // Show target
+            document.getElementById(sectionId).classList.add('active');
+            
+            // Update Sidebar Active State
+            // Find the button that calls this function (rough approx)
+            const navBtn = Array.from(document.querySelectorAll('.nav-item')).find(b => b.getAttribute('onclick').includes(sectionId));
+            if(navBtn) navBtn.classList.add('bg-slate-800', 'text-white');
+
+            // Update Header Title
+            const titles = {
+                'dashboard': 'Beranda',
+                'manage-items': 'Kelola Data Barang',
+                'manage-distributors': 'Data Distributor',
+                'stock-levels': 'Jumlah Stok Gudang',
+                'stock-in': 'Input Barang Masuk',
+                'stock-out': 'Input Barang Keluar',
+                'sales': 'Kasir Penjualan',
+                'optimization': 'Optimasi EOQ (AI Model)',
+                'reports': 'Laporan Lengkap',
+                'profile': 'Profil Pengguna'
+            };
+            document.getElementById('page-title').textContent = titles[sectionId] || 'Sistem EOQ';
+
+            if(sectionId === 'dashboard') updateDashboard();
+            if(sectionId === 'reports') renderReports();
+        }
+
+        // --- CORE FUNCTIONALITY ---
+
+        function initApp() {
+            renderItemsTable();
+            renderStockLevels();
+            updateDashboard();
+            populateSelects();
+        }
+
+        function formatRupiah(num) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+        }
+
+        function saveData() {
+            localStorage.setItem('eoq_items', JSON.stringify(items));
+            localStorage.setItem('eoq_transactions', JSON.stringify(transactions));
+            initApp(); // Refresh UI
+        }
+
+        // --- ITEMS MANAGEMENT ---
+        function renderItemsTable() {
+            const tbody = document.getElementById('items-table-body');
+            tbody.innerHTML = '';
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'bg-white border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-gray-900">${item.code}</td>
+                    <td class="px-6 py-4">${item.name}</td>
+                    <td class="px-6 py-4">${item.d.toLocaleString()}</td>
+                    <td class="px-6 py-4">${formatRupiah(item.s)}</td>
+                    <td class="px-6 py-4">${formatRupiah(item.h)}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="deleteItem(${item.id})" class="text-red-600 hover:text-red-900"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+
+        function addItem(e) {
+            e.preventDefault();
+            const newItem = {
+                id: Date.now(),
+                code: 'BRG-' + Math.floor(Math.random() * 1000),
+                name: document.getElementById('add-name').value,
+                d: parseInt(document.getElementById('add-d').value),
+                s: parseInt(document.getElementById('add-s').value),
+                h: parseInt(document.getElementById('add-h').value),
+                stock: parseInt(document.getElementById('add-stock').value)
+            };
+            items.push(newItem);
+            saveData();
+            closeModal('modal-add-item');
+            e.target.reset();
+            showToast('Barang berhasil ditambahkan', 'success');
+        }
+
+        function deleteItem(id) {
+            if(confirm('Hapus barang ini?')) {
+                items = items.filter(i => i.id !== id);
+                saveData();
+                showToast('Barang dihapus', 'success');
+            }
+        }
+
+        // --- STOCK & TRANSACTIONS ---
+        function populateSelects() {
+            const selects = ['in-item-select', 'out-item-select', 'opt-item-select'];
+            selects.forEach(sid => {
+                const sel = document.getElementById(sid);
+                sel.innerHTML = '<option value="">-- Pilih Barang --</option>';
+                items.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    opt.text = `${item.code} - ${item.name}`;
+                    sel.appendChild(opt);
+                });
+            });
+        }
+
+        function renderStockLevels() {
+            const tbody = document.getElementById('stock-level-body');
+            tbody.innerHTML = '';
+            items.forEach(item => {
+                let statusClass = item.stock < 100 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800';
+                let statusText = item.stock < 100 ? 'Stok Rendah' : 'Aman';
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3">${item.name}</td>
+                    <td class="p-3 font-bold">${item.stock}</td>
+                    <td class="p-3"><span class="px-2 py-1 rounded-full text-xs font-bold ${statusClass}">${statusText}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function handleTransaction(e, type) {
+            e.preventDefault();
+            const itemId = parseInt(document.getElementById(type === 'in' ? 'in-item-select' : 'out-item-select').value);
+            const qty = parseInt(document.getElementById(type === 'in' ? 'in-qty' : 'out-qty').value);
+            const note = document.getElementById(type === 'in' ? 'in-note' : '') || '-';
+
+            const item = items.find(i => i.id === itemId);
+            if (!item) return;
+
+            if (type === 'out' && item.stock < qty) {
+                showToast('Stok tidak mencukupi!', 'error');
+                return;
+            }
+
+            // Update Stock
+            item.stock = type === 'in' ? item.stock + qty : item.stock - qty;
+            
+            // Record Transaction
+            const trans = {
+                id: 'TRX-' + Date.now(),
+                date: new Date().toISOString().split('T')[0],
+                itemName: item.name,
+                type: type === 'in' ? 'Masuk' : 'Keluar',
+                qty: qty,
+                note: note
+            };
+            transactions.unshift(trans); // Add to top
+
+            saveData();
+            e.target.reset();
+            showToast('Transaksi berhasil disimpan', 'success');
+        }
+
+        function updateDashboard() {
+            document.getElementById('dash-total-items').textContent = items.length;
+            // Calc stock value (approx using H as cost basis for demo, or usually unit price, but we don't have unit price, let's assume H is somewhat related or just count)
+            // Let's just count total stock units for simplicity or random value for demo
+            let totalStock = items.reduce((sum, i) => sum + i.stock, 0);
+            document.getElementById('dash-stock-value').textContent = formatRupiah(totalStock * 10000); // Dummy value unit price 10k
+
+            const recentTbody = document.getElementById('dash-recent-transactions');
+            recentTbody.innerHTML = '';
+            transactions.slice(0, 5).forEach(t => {
+                const color = t.type === 'Masuk' ? 'text-green-600' : 'text-red-600';
+                const tr = document.createElement('tr');
+                tr.className = 'border-b last:border-0';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 text-gray-500">${t.date}</td>
+                    <td class="px-4 py-3 font-medium">${t.itemName}</td>
+                    <td class="px-4 py-3 ${color} text-xs font-bold uppercase">${t.type}</td>
+                    <td class="px-4 py-3">${t.qty}</td>
+                `;
+                recentTbody.appendChild(tr);
+            });
+        }
+
+        function renderReports() {
+            const tbody = document.getElementById('report-table-body');
+            tbody.innerHTML = '';
+            transactions.forEach(t => {
+                const color = t.type === 'Masuk' ? 'text-green-600' : 'text-red-600';
+                const tr = document.createElement('tr');
+                tr.className = 'border-b last:border-0 hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-xs">${t.id}</td>
+                    <td class="px-4 py-3">${t.date}</td>
+                    <td class="px-4 py-3">${t.itemName}</td>
+                    <td class="px-4 py-3 ${color} font-bold text-xs">${t.type}</td>
+                    <td class="px-4 py-3">${t.qty}</td>
+                    <td class="px-4 py-3 text-gray-400 italic text-xs">${t.note}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- EOQ OPTIMIZATION ENGINE ---
+        let chartInstance = null;
+
+        function loadItemParams() {
+            const id = parseInt(document.getElementById('opt-item-select').value);
+            const item = items.find(i => i.id === id);
+            if (item) {
+                document.getElementById('opt-d').value = item.d;
+                document.getElementById('opt-s').value = item.s;
+                document.getElementById('opt-h').value = item.h;
+            }
+        }
+
+        function runEOQ(e) {
+            e.preventDefault();
+            
+            // 1. Show Loading (TFJS Simulation)
+            document.getElementById('eoq-empty').classList.add('hidden');
+            document.getElementById('eoq-results').classList.add('hidden');
+            document.getElementById('eoq-loading').classList.remove('hidden');
+
+            // Get Values
+            const D = parseFloat(document.getElementById('opt-d').value);
+            const S = parseFloat(document.getElementById('opt-s').value);
+            const H = parseFloat(document.getElementById('opt-h').value);
+
+            // 2. Simulate Computation Delay (2 seconds)
+            setTimeout(() => {
+                // 3. EOQ Math Logic
+                // EOQ = sqrt(2DS/H)
+                const EOQ = Math.round(Math.sqrt((2 * D * S) / H));
+                
+                // Annual Holding Cost = (Q/2) * H
+                const holdingCost = (EOQ / 2) * H;
+                
+                // Annual Ordering Cost = (D/Q) * S
+                const orderingCost = (D / EOQ) * S;
+                
+                // Total Cost
+                const totalCost = holdingCost + orderingCost;
+
+                // Frequency = D / Q
+                const frequency = Math.round(D / EOQ);
+
+                // 4. Display Results
+                document.getElementById('res-q').textContent = EOQ.toLocaleString();
+                document.getElementById('res-tc').textContent = formatRupiah(totalCost);
+                document.getElementById('res-freq').textContent = frequency + " Kali";
+                
+                document.getElementById('res-hc').textContent = formatRupiah(holdingCost);
+                document.getElementById('res-oc').textContent = formatRupiah(orderingCost);
+                document.getElementById('res-tc-dup').textContent = formatRupiah(totalCost);
+
+                // 5. Render Chart
+                renderChart(holdingCost, orderingCost, totalCost);
+
+                // Switch Views
+                document.getElementById('eoq-loading').classList.add('hidden');
+                document.getElementById('eoq-results').classList.remove('hidden');
+                document.getElementById('eoq-results').classList.add('animate-pulse-once'); // Simple CSS trigger
+                
+                showToast('Analisis Selesai', 'success');
+            }, 1500); 
+        }
+
+        function renderChart(hc, oc, tc) {
+            const ctx = document.getElementById('eoqChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Holding Cost', 'Ordering Cost', 'Total Cost'],
+                    datasets: [{
+                        label: 'Biaya (Rp)',
+                        data: [hc, oc, tc],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.7)', // Blue
+                            'rgba(16, 185, 129, 0.7)', // Green
+                            'rgba(239, 68, 68, 0.7)'   // Red
+                        ],
+                        borderColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(16, 185, 129)',
+                            'rgb(239, 68, 68)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // --- UTILS ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast border-${type === 'success' ? 'green' : 'red'}-500`;
+            toast.innerHTML = `
+                <div class="mr-3 text-${type === 'success' ? 'green' : 'red'}-500">
+                    <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+                </div>
+                <div class="text-sm font-medium text-gray-800">${message}</div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
