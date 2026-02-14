@@ -1,55 +1,48 @@
-import { getStorage } from '../utils/index.js';
-import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 
-export const uploadProfilePicture = async (fileBuffer, username, currentAvatarUrl) => {
-  const bucketName = process.env.GCLOUD_STORAGE_BUCKET;
-  const bucket = getStorage().bucket(bucketName);
+// Hack untuk dapatkan __dirname di ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  // 1. HAPUS FOTO LAMA (PERBAIKAN LOGIKA PATH)
+// Folder tujuan (di luar folder src)
+const uploadDir = path.join(__dirname, '../../public/uploads');
+
+// Pastikan folder ada
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+export const uploadProfilePicture = async (fileBuffer, username, currentAvatarUrl) => {
+  // 1. Hapus Foto Lama jika ada
   if (currentAvatarUrl) {
     try {
-      // URL: https://storage.googleapis.com/eoqbucket/pictures/file.jpg
-      // Kita butuh: pictures/file.jpg
+      // Asumsi URL: http://localhost:3000/uploads/namafile.jpg
+      const filename = currentAvatarUrl.split('/').pop();
+      const oldPath = path.join(uploadDir, filename);
       
-      // Hapus prefix URL biar dapat path folder yang benar
-      const urlPrefix = `https://storage.googleapis.com/${bucketName}/`;
-      
-      if (currentAvatarUrl.startsWith(urlPrefix)) {
-        const oldFilePath = currentAvatarUrl.replace(urlPrefix, '');
-        
-        // Lakukan hapus
-        await bucket.file(oldFilePath).delete();
-        console.log(`🗑️  Foto lama berhasil dihapus dari GCS: ${oldFilePath}`);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+        console.log(`🗑️ Foto lama terhapus: ${filename}`);
       }
     } catch (err) {
-      // Jangan batalkan upload jika gagal hapus (misal file memang sudah dihapus manual)
-      console.warn('⚠️  Gagal menghapus foto lama:', err.message);
+      console.warn('⚠️ Gagal hapus foto lama:', err.message);
     }
   }
 
-  // 2. Resize & Compress gambar baru (512x512)
-  const processedBuffer = await sharp(fileBuffer)
-    .resize(512, 512, { fit: 'cover' }) // <--- UBAH KE 512
+  // 2. Process & Save
+  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+  const filename = `profile-${username}-${uniqueSuffix}.jpg`;
+  const outputPath = path.join(uploadDir, filename);
+
+  await sharp(fileBuffer)
+    .resize(512, 512, { fit: 'cover' })
     .jpeg({ quality: 80 })
-    .toBuffer();
+    .toFile(outputPath);
 
-  // 3. Generate nama file unik di folder /pictures
-  const fileName = `pictures/${username}_${uuidv4()}.jpg`;
-  const file = bucket.file(fileName);
-
-  console.log(`⏳ Mengupload ${fileName}...`);
-
-  // 4. Upload ke Google Cloud Storage
-  await file.save(processedBuffer, {
-    metadata: {
-      contentType: 'image/jpeg',
-      cacheControl: 'public, max-age=86400'
-    },
-    predefinedAcl: 'publicRead',
-  });
-
-  console.log(`✅ Upload Berhasil!`);
-
-  return `https://storage.googleapis.com/${bucketName}/${fileName}`;
+  // Kembalikan URL yang bisa diakses publik
+  // Nanti kita set static folder di index.js
+  return `${process.env.BASE_URL || 'http://localhost:3000'}/uploads/${filename}`;
 };

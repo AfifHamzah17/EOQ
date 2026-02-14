@@ -1,153 +1,51 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { getFirestore } from '../utils/index.js';
-import { v4 as uuidv4 } from 'uuid';
+import { UserModel } from '../models/UserModel.js';
 
-const usersCol = () => getFirestore().collection('users');
+// Helper
+export const validateEmail = (email) => /\S+@\S+\.\S+/.test(email);
+export const isPasswordStrong = (password) => /^(?=.*[A-Z])(?=.*[\d!@#$%^&*]).{8,}$/.test(password);
 
-// <--- TAMBAHKAN 'export' DI SINI --->
-export const validateEmail = (email) => {
-  const re = /\S+@\S+\.\S+/;
-  return re.test(email);
-};
+// 1. REGISTER
+export const register = async ({ username, email, password, name, role = 'karyawan' }) => {
+  if (!username || !email || !password || !name) throw { status: 400, message: 'Data wajib diisi' };
+  if (!validateEmail(email)) throw { status: 400, message: 'Format email tidak valid' };
+  if (!isPasswordStrong(password)) throw { status: 400, message: 'Password lemah!' };
 
-// <--- TAMBAHKAN 'export' DI SINI --->
-export const isPasswordStrong = (password) => {
-  const regex = /^(?=.*[A-Z])(?=.*[\d!@#$%^&*]).{8,}$/;
-  return regex.test(password);
-};
+  const existingUser = await UserModel.findOne({ $or: [{ username }, { email }] });
+  if (existingUser) throw { status: 409, message: 'Username atau Email sudah terdaftar' };
 
-// 1. REGISTER (Membuat User Baru + ID Baru)
-export const register = async ({ username, email, password, name, role = 'user' }) => {
-  if (!username || !email || !password || !name) {
-    const err = new Error('Username, email, password, dan nama wajib diisi');
-    err.status = 400;
-    throw err;
-  }
-
-  if (!validateEmail(email)) { // Memanggil exported function
-    const err = new Error('Format email tidak valid');
-    err.status = 400;
-    throw err;
-  }
-
-  if (!isPasswordStrong(password)) { // Memanggil exported function
-    const err = new Error('Password lemah! Minimal 8 karakter, 1 huruf BESAR, dan 1 angka/simbol');
-    err.status = 400;
-    throw err;
-  }
-
-  // Cek Username unik
-  const snapUser = await usersCol().where('username', '==', username).limit(1).get();
-  if (!snapUser.empty) {
-    const err = new Error('Username sudah terdaftar');
-    err.status = 409;
-    throw err;
-  }
-
-  // Cek Email unik
-  const snapEmail = await usersCol().where('email', '==', email).limit(1).get();
-  if (!snapEmail.empty) {
-    const err = new Error('Email sudah terdaftar');
-    err.status = 409;
-    throw err;
-  }
-
-  // --- GENERATE ID BARU (UUID) ---
-  const userId = uuidv4(); 
   const hash = await bcrypt.hash(password, 10);
-
-  await usersCol().doc(userId).set({
-    userId,
-    username,
-    email,
-    passwordHash: hash,
-    name,
-    role, 
-    avatarUrl: null,
-    createdAt: new Date()
+  
+  const user = await UserModel.create({
+    username, email, passwordHash: hash, name, role
   });
 
-  // Return ID agar user/terdepan tahu ID barunya
-  return { message: 'Pendaftaran berhasil', userId, username };
+  return { message: 'Pendaftaran berhasil', userId: user.id, username };
 };
 
 // 2. LOGIN
 export const login = async (reqBody) => {
-  // 1. CEK APAKAH BODY DITERIMA (DEBUGGING)
-  if (!reqBody || Object.keys(reqBody).length === 0) {
-    const err = new Error('BODY KOSONG. Server tidak menerima data JSON. Cek Content-Type header di Postman/Frontend.');
-    err.status = 400;
-    throw err;
-  }
-
-  // 2. CEK APAKAH DATA ADA
   const { identity, password } = reqBody;
+  if (!identity || !password) throw { status: 400, message: 'Identitas dan password wajib diisi' };
 
-  if (!identity) {
-    const err = new Error('DATA TIDAK LENGKAP: Field "identity" (username/email) tidak ditemukan.');
-    err.status = 400;
-    throw err;
-  }
+  // Cari by username ATAU email
+  const user = await UserModel.findOne({
+    $or: [{ username: identity }, { email: identity }]
+  });
 
-  if (!password) {
-    const err = new Error('DATA TIDAK LENGKAP: Field "password" tidak ditemukan.');
-    err.status = 400;
-    throw err;
-  }
+  if (!user) throw { status: 401, message: 'Login Gagal: User tidak ditemukan' };
 
-  // --- LOGIKA LOGIN LAINNYA ---
-  const { getFirestore } = await import('../utils/index.js');
-  const usersCol = getFirestore().collection('users');
-
-  let userData = null;
-  let userId = null;
-
-  // Cari user berdasarkan username ATAU email
-  const snapshot = await usersCol
-    .where('username', '==', identity)
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) {
-    const snapEmail = await usersCol
-      .where('email', '==', identity)
-      .limit(1)
-      .get();
-    
-    if (!snapEmail.empty) {
-      userData = snapEmail.docs[0].data();
-      userId = snapEmail.docs[0].id;
-    }
-  } else {
-    userData = snapshot.docs[0].data();
-    userId = snapshot.docs[0].id;
-  }
-
-  if (!userData) {
-    const err = new Error('LOGIN GAGAL: Username, Email, atau password salah.');
-    err.status = 401;
-    throw err;
-  }
-
-  // (Logika password compare, jwt sign, dll tetap sama) ...
-  const bcrypt = (await import('bcrypt')).default;
-  const jwt = (await import('jsonwebtoken')).default;
-
-  const match = await bcrypt.compare(password, userData.passwordHash);
-  if (!match) {
-    const err = new Error('LOGIN GAGAL: Username, Email, atau password salah.');
-    err.status = 401;
-    throw err;
-  }
+  const match = await bcrypt.compare(password, user.passwordHash);
+  if (!match) throw { status: 401, message: 'Login Gagal: Password salah' };
 
   const token = jwt.sign(
     { 
-      userId, 
-      username: userData.username, 
-      email: userData.email,
-      name: userData.name, 
-      role: userData.role 
+      userId: user.id, 
+      username: user.username, 
+      email: user.email,
+      name: user.name, 
+      role: user.role 
     }, 
     process.env.JWT_SECRET, 
     { expiresIn: process.env.JWT_EXPIRES_IN }
@@ -156,117 +54,69 @@ export const login = async (reqBody) => {
   return {
     token,
     user: {
-      userId, 
-      name: userData.name,
-      username: userData.username,
-      email: userData.email,
-      role: userData.role,
-      avatar: userData.avatarUrl
+      userId: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatarUrl
     }
   };
 };
 
-// 3. INIT ADMIN (Juga pakai UUID)
+// 3. INIT ADMIN
 export const initAdmin = async () => {
-  const snap = await usersCol().where('role', '==', 'admin').limit(1).get();
-  
-  if (snap.empty) {
-    const adminId = uuidv4(); // Generate ID Admin
+  const adminExists = await UserModel.findOne({ role: 'admin' });
+  if (!adminExists) {
     const hash = await bcrypt.hash('123456', 10);
-    
-    await usersCol().doc(adminId).set({
-      userId: adminId,
+    await UserModel.create({
       username: 'admin',
-      email: 'admin@eoq.com', 
+      email: 'admin@eoq.com',
       passwordHash: hash,
       name: 'Administrator',
-      role: 'admin',
-      avatarUrl: null
+      role: 'admin'
     });
-    console.log('✅ Default Admin created (UUID): (User: admin / Pass: 123456)');
+    console.log('✅ Default Admin created (User: admin / Pass: 123456)');
   }
 };
 
-// 4. GET USER PROFILE (Single)
+// 4. GET USER PROFILE
 export const getUserProfile = async (userId) => {
-  const doc = await usersCol().doc(userId).get();
-  if (!doc.exists) {
-    const err = new Error('User tidak ditemukan');
-    err.status = 404;
-    throw err;
-  }
-  const userData = doc.data();
-  delete userData.passwordHash;
-  return userData;
+  const user = await UserModel.findById(userId);
+  if (!user) throw { status: 404, message: 'User tidak ditemukan' };
+  return user.toJSON(); // sudah handle remove password via schema config
 };
 
-// 5. GET ALL USERS (Admin Only)
+// 5. GET ALL USERS
 export const getAllUsers = async () => {
-  const snapshot = await usersCol().get();
-  const users = [];
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    delete data.passwordHash;
-    users.push({
-      userId: doc.id, // UUID dari Doc ID
-      ...data
-    });
-  });
-  return users;
+  const users = await UserModel.find();
+  return users.map(u => u.toJSON());
 };
 
-// 6. CHANGE PASSWORD (User sendiri)
+// 6. CHANGE PASSWORD
 export const changePassword = async (userId, oldPassword, newPassword) => {
-  if (!isPasswordStrong(newPassword)) { // Memanggil exported function
-    const err = new Error('Password baru tidak cukup kuat!');
-    err.status = 400;
-    throw err;
-  }
+  if (!isPasswordStrong(newPassword)) throw { status: 400, message: 'Password baru tidak cukup kuat!' };
 
-  const doc = await usersCol().doc(userId).get();
-  if (!doc.exists) {
-    const err = new Error('User tidak ditemukan');
-    err.status = 404;
-    throw err;
-  }
+  const user = await UserModel.findById(userId);
+  if (!user) throw { status: 404, message: 'User tidak ditemukan' };
 
-  const userData = doc.data();
-  const isMatch = await bcrypt.compare(oldPassword, userData.passwordHash);
-  if (!isMatch) {
-    const err = new Error('Password lama salah!');
-    err.status = 401;
-    throw err;
-  }
+  const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+  if (!isMatch) throw { status: 401, message: 'Password lama salah!' };
 
-  const hash = await bcrypt.hash(newPassword, 10);
-  await usersCol().doc(userId).update({ passwordHash: hash });
-
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await user.save();
   return 'Password berhasil diubah';
 };
 
 // 7. RESET PASSWORD BY ADMIN
 export const resetPasswordByAdmin = async (adminRole, targetUserId, newPassword) => {
-  if (adminRole !== 'admin') {
-    const err = new Error('Hanya Admin yang boleh mereset password orang lain');
-    err.status = 403;
-    throw err;
-  }
+  if (adminRole !== 'admin') throw { status: 403, message: 'Hanya Admin yang boleh mereset' };
+  if (!isPasswordStrong(newPassword)) throw { status: 400, message: 'Password baru tidak cukup kuat!' };
 
-  if (!isPasswordStrong(newPassword)) { // Memanggil exported function
-    const err = new Error('Password baru tidak cukup kuat!');
-    err.status = 400;
-    throw err;
-  }
+  const user = await UserModel.findById(targetUserId);
+  if (!user) throw { status: 404, message: 'User target tidak ditemukan' };
 
-  const doc = await usersCol().doc(targetUserId).get();
-  if (!doc.exists) {
-    const err = new Error('User target tidak ditemukan');
-    err.status = 404;
-    throw err;
-  }
-
-  const hash = await bcrypt.hash(newPassword, 10);
-  await usersCol().doc(targetUserId).update({ passwordHash: hash });
-
-  return `Password berhasil direset`;
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  return 'Password berhasil direset';
 };

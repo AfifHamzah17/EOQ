@@ -1,34 +1,35 @@
-// Service ini HANYA menghitung matematika (Logic Pure)
-// Tidak perlu Database, menerima input D, S, H dan output Q
+// src/services/eoq.service.js
+import { ItemModel } from '../models/ItemModel.js';
+import { ShippingModel } from '../models/ShippingModel.js';
 
-export const calculateEOQ = (d, s, h) => {
-  // Validasi Input
-  if (!d || !s || !h || d <= 0 || s <= 0 || h <= 0) {
-    throw new Error('Parameter D, S, H harus lebih besar dari 0');
+export const getEOQParameters = async () => {
+  try {
+    console.log(">>> Mengambil data EOQ...");
+
+    // 1. Hitung D (Total Stok)
+    // PASTIKAN NAMA FIELD '$stock' SESUAI DATABASE ANDA
+    const itemStats = await ItemModel.aggregate([
+      { $group: { _id: null, totalStock: { $sum: "$stock" } } }
+    ]);
+
+    // 2. Hitung S (Rata-rata Harga Pengiriman)
+    const shippingStats = await ShippingModel.aggregate([
+      { $match: { price: { $ne: null, $exists: true, $type: "number" } } },
+      { $group: { _id: null, avgShippingCost: { $avg: "$price" } } }
+    ]);
+
+    const D = itemStats.length > 0 ? itemStats[0].totalStock : 0;
+    const S = shippingStats.length > 0 ? shippingStats[0].avgShippingCost : 0;
+
+    // KEMBALIKAN HASIL (RETURN)
+    return {
+      totalStock: D,
+      avgShippingCost: S
+    };
+
+  } catch (error) {
+    console.error("Error Service:", error);
+    // LEMPAR ERROR KE ROUTES
+    throw error; 
   }
-
-  // --- RUMUS EOQ (Sama persis dengan Python) ---
-  // EOQ = sqrt(2DS/H)
-  const Q = Math.sqrt((2 * d * s) / h);
-
-  // --- Hitung Komponen Biaya ---
-  // Total Ordering Cost = (D / Q) * S
-  const orderingCost = (d / Q) * s;
-
-  // Total Holding Cost = (Q / 2) * H
-  const holdingCost = (Q / 2) * h;
-
-  // Total Cost
-  const totalCost = orderingCost + holdingCost;
-
-  // Frekuensi = D / Q
-  const frequency = Math.round(d / Q);
-
-  return {
-    q: Math.round(Q),
-    orderingCost,
-    holdingCost,
-    totalCost,
-    frequency
-  };
 };

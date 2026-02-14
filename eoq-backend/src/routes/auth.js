@@ -5,9 +5,10 @@ import {
   register, 
   changePassword, 
   resetPasswordByAdmin,
-  isPasswordStrong 
+  isPasswordStrong,
+  getAllUsers // <--- Import fungsi dari service
 } from '../services/auth.service.js';
-import { authenticate, authorize } from '../middlewares/auth.js'; // Import di sini saja
+import { authenticate, authorize } from '../middlewares/auth.js';
 
 const router = express.Router();
 
@@ -51,16 +52,8 @@ router.post('/change-password', authenticate, async (req, res) => {
 // 2. ADMIN: AMBIL USER
 router.get('/users', authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const { getFirestore } = await import('../utils/index.js');
-    const db = getFirestore();
-    const snapshot = await db.collection('users').get();
-
-    const users = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const { passwordHash, ...safeData } = data; 
-      return { id: doc.id, ...safeData };
-    });
-
+    // Langsung pakai service, jangan akses DB manual di route
+    const users = await getAllUsers();
     res.json({ error: false, data: users });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
@@ -70,7 +63,7 @@ router.get('/users', authenticate, authorize(['admin']), async (req, res) => {
 // 3. ADMIN: RESET PASSWORD USER LAIN
 router.post('/users/reset-password', authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const { iduser } = req.query; // Ambil dari query ?iduser=...
+    const { iduser } = req.query;
     const { newPassword } = req.body;
 
     if (!isPasswordStrong(newPassword)) {

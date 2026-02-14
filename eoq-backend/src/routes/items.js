@@ -4,13 +4,13 @@ import { checkRole } from '../middlewares/role.js';
 import { 
   getItems, 
   createItem, 
-  updateItem, 
+  updateItem, // Pastikan ini ada di service
   deleteItem, 
   processIncomingStock, 
   processStockOut,
   getItemHistory,
   editTransaction,
-  getInventoryReport // <--- IMPORT BARU UNTUK EXPORT EXCEL
+  getInventoryReport 
 } from '../services/items.service.js';
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-// 2. GET INVENTORY REPORT (BARU: Untuk Export Excel dengan Total Masuk/Keluar)
+// 2. GET INVENTORY REPORT
 router.get('/report', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
     const reportData = await getInventoryReport();
@@ -36,7 +36,7 @@ router.get('/report', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-// 3. GET ITEM HISTORY (Mixed In/Out)
+// 3. GET ITEM HISTORY
 router.get('/history/:code', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
     const history = await getItemHistory(req.params.code);
@@ -105,7 +105,17 @@ router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-// 8. DELETE
+// 8. UPDATE MANUAL (Tambahkan route ini jika ada fungsi updateItem di service)
+router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
+  try {
+    const result = await updateItem(req.params.id, req.body);
+    res.json({ error: false, message: result.message });
+  } catch (err) {
+    res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+// 9. DELETE
 router.delete('/:id', checkRole(['admin']), async (req, res) => {
   try {
     await deleteItem(req.params.id);
