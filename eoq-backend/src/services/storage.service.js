@@ -42,7 +42,5 @@ export const uploadProfilePicture = async (fileBuffer, username, currentAvatarUr
     .jpeg({ quality: 80 })
     .toFile(outputPath);
 
-  // Kembalikan URL yang bisa diakses publik
-  // Nanti kita set static folder di index.js
   return `${process.env.BASE_URL || 'http://localhost:3000'}/uploads/${filename}`;
 };
