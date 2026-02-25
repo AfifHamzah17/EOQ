@@ -29,11 +29,15 @@ router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
     const newSale = await createSale(req.body);
     res.status(201).json({ error: false, data: newSale });
   } catch (err) {
+    // Tangkap error validasi unique date (kode 400 bad request)
+    if (err.message.includes('sudah ada')) {
+      return res.status(400).json({ error: true, message: err.message });
+    }
     res.status(500).json({ error: true, message: err.message });
   }
 });
 
-// 3. UPLOAD CSV
+// 3. UPLOAD CSV (Harus di atas route /:id)
 router.post('/upload', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
     const dataArray = req.body;
@@ -45,6 +49,10 @@ router.post('/upload', checkRole(['admin', 'karyawan']), async (req, res) => {
     res.status(500).json({ error: true, message: err.message });
   }
 });
+
+// ================================================== 
+// ROUTE DENGAN PARAMETER ID HARUS DI PALING BAWAH
+// ==================================================
 
 // 4. GET BY ID
 router.get('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
@@ -62,6 +70,9 @@ router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
     const result = await updateSale(req.params.id, req.body);
     res.json({ error: false, message: result.message });
   } catch (err) {
+    if (err.message.includes('sudah digunakan')) {
+      return res.status(400).json({ error: true, message: err.message });
+    }
     res.status(500).json({ error: true, message: err.message });
   }
 });

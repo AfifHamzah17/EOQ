@@ -1,22 +1,20 @@
 import mongoose from 'mongoose';
 
 const SalesSchema = new mongoose.Schema({
-  salesNo: { type: String, required: true, unique: true }, // PJL-001
-  date: { type: Date, required: true },
+  salesNo: { type: String, required: true, unique: true },
+  date: { type: Date, required: true, unique: true }, 
   
-  // Untuk uang, kita gunakan Number (Integer) agar aman dari floating point error
-  // Simpan dalam satuan terkecil (misal 16055000), frontend yang akan format nanti
-  remainingMoney: { type: Number, default: 0 }, // Sisa Uang
-  expense: { type: Number, default: 0 },        // Pengeluaran
-  totalAll: { type: Number, default: 0 },       // Total Seluruh
+  remainingMoney: { type: Number, default: 0 }, 
+  expense: { type: Number, default: 0 },        
+  totalAll: { type: Number, default: 0 },       
   
-  serba35: { type: Number, default: 0 },        // Serba 35
-  serba75: { type: Number, default: 0 },        // Serba 75
+  serba35: { type: Number, default: 0 },        
+  serba50: { type: Number, default: 0 },        
+  serba75: { type: Number, default: 0 },        
   
   createdAt: { type: Date, default: Date.now }
 });
 
-// Virtual helper agar front-end mudah baca 'id'
 SalesSchema.set('toJSON', {
   virtuals: true,
   transform: (doc, ret) => {
