@@ -1,3 +1,4 @@
+// src/routes/sales.js
 import express from 'express';
 import { authenticate } from '../middlewares/auth.js';
 import { checkRole } from '../middlewares/role.js';
@@ -16,7 +17,8 @@ router.use(authenticate);
 // 1. GET ALL
 router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
-    const sales = await getAllSales();
+    // Kirim req.user
+    const sales = await getAllSales(req.user);
     res.json({ error: false, data: sales });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
@@ -26,10 +28,10 @@ router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
 // 2. CREATE
 router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
-    const newSale = await createSale(req.body);
+    // Kirim req.user
+    const newSale = await createSale(req.body, req.user);
     res.status(201).json({ error: false, data: newSale });
   } catch (err) {
-    // Tangkap error validasi unique date (kode 400 bad request)
     if (err.message.includes('sudah ada')) {
       return res.status(400).json({ error: true, message: err.message });
     }
@@ -37,27 +39,25 @@ router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-// 3. UPLOAD CSV (Harus di atas route /:id)
+// 3. UPLOAD CSV
 router.post('/upload', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
     const dataArray = req.body;
     if (!Array.isArray(dataArray)) return res.status(400).json({ error: true, message: 'Format data harus array' });
     
-    const result = await uploadSalesCsv(dataArray);
+    // Kirim req.user
+    const result = await uploadSalesCsv(dataArray, req.user);
     res.json({ error: false, message: result.message, details: result.results });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
   }
 });
 
-// ================================================== 
-// ROUTE DENGAN PARAMETER ID HARUS DI PALING BAWAH
-// ==================================================
-
 // 4. GET BY ID
 router.get('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
-    const item = await getSaleById(req.params.id);
+    // Kirim req.user
+    const item = await getSaleById(req.params.id, req.user);
     res.json({ error: false, data: item });
   } catch (err) {
     res.status(404).json({ error: true, message: err.message });
@@ -67,7 +67,8 @@ router.get('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
 // 5. UPDATE
 router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
   try {
-    const result = await updateSale(req.params.id, req.body);
+    // Kirim req.user
+    const result = await updateSale(req.params.id, req.body, req.user);
     res.json({ error: false, message: result.message });
   } catch (err) {
     if (err.message.includes('sudah digunakan')) {
@@ -80,7 +81,8 @@ router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
 // 6. DELETE
 router.delete('/:id', checkRole(['admin']), async (req, res) => {
   try {
-    const result = await deleteSale(req.params.id);
+    // Kirim req.user
+    const result = await deleteSale(req.params.id, req.user);
     res.json({ error: false, message: result.message });
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });

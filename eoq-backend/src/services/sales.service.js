@@ -1,104 +1,86 @@
+//src/services/sales.service.js
 import { SalesModel } from '../models/SalesModel.js';
+import { STORE_PREFIXES } from '../constants/storePrefixes.js'; 
 
-const generateSalesNo = async () => {
-  const last = await SalesModel.findOne().sort({ createdAt: -1 });
-  if (!last) return 'PJL-001';
+const getCabangFilter = (user) => user.role === 'admin' ? {} : { namaCabang: user.namaCabang };
+
+const generateNextSalesNo = async (cabang) => {
+  const prefix = STORE_PREFIXES[cabang] || 'BRG';
   
-  const lastCode = last.salesNo; 
-  const lastNum = parseInt(lastCode.split('-')[1]);
-  
-  if (isNaN(lastNum)) return 'PJL-001';
-  
-  const nextNum = lastNum + 1;
-  return `PJL-${String(nextNum).padStart(3, '0')}`;
+  const lastSale = await SalesModel.findOne({ namaCabang: cabang })
+    .sort({ createdAt: -1 })
+    .select('salesNo')
+    .limit(1);
+
+  if (!lastSale) return `${prefix}-PJL-001`;
+
+  const parts = lastSale.salesNo.split('-');
+  const lastNum = parseInt(parts[parts.length - 1]);
+  return `${prefix}-PJL-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(3, '0')}`;
 };
 
-export const createSale = async (data) => {
-  const inputDate = new Date(data.date);
-  inputDate.setHours(0, 0, 0, 0); 
+export const createSale = async (data, user) => {
+  const namaCabang = user.role === 'admin' ? data.namaCabang : user.namaCabang;
+  if (!namaCabang) throw new Error('Nama cabang wajib diisi.');
 
-  const existing = await SalesModel.findOne({ 
-    date: { $gte: inputDate, $lt: new Date(inputDate.getTime() + 24*60*60*1000) } 
-  });
-  
-  if (existing) {
-    throw new Error(`Tanggal ${data.date} sudah ada di database. Hanya boleh 1 data per tanggal.`);
-  }
+  const salesNo = await generateNextSalesNo(namaCabang);
 
-  const salesNo = data.salesNo || await generateSalesNo();
-
+  // FIX: ...data ditaruh paling depan agar salesNo & namaCabang dari backend tidak tertimpa data kosong dari frontend
   const newSale = await SalesModel.create({
+    ...data,
     salesNo,
-    date: data.date,
-    remainingMoney: parseInt(data.remainingMoney) || 0,
-    expense: parseInt(data.expense) || 0,
-    totalAll: parseInt(data.totalAll) || 0,
-    serba35: parseInt(data.serba35) || 0,
-    serba50: parseInt(data.serba50) || 0, 
-    serba75: parseInt(data.serba75) || 0,
+    namaCabang
   });
 
   return newSale;
 };
 
-export const getAllSales = async () => {
-  return await SalesModel.find().sort({ createdAt: -1 });
+export const getAllSales = async (user) => { 
+  return await SalesModel.find(getCabangFilter(user)).sort({ createdAt: -1 }); 
 };
 
-export const getSaleById = async (id) => {
+export const getSaleById = async (id, user) => {
   const sale = await SalesModel.findById(id);
-  if (!sale) throw new Error('Data penjualan tidak ditemukan');
+  if (!sale) throw new Error('Data tidak ditemukan');
+  if (user.role !== 'admin' && sale.namaCabang !== user.namaCabang) throw new Error('Akses ditolak');
   return sale;
 };
 
-export const updateSale = async (id, data) => {
-  if (data.date) {
-    const inputDate = new Date(data.date);
-    inputDate.setHours(0, 0, 0, 0);
-    
-    const existing = await SalesModel.findOne({ 
-      date: { $gte: inputDate, $lt: new Date(inputDate.getTime() + 24*60*60*1000) },
-      _id: { $ne: id } 
-    });
-
-    if (existing) {
-      throw new Error(`Tanggal ${data.date} sudah digunakan oleh data lain.`);
-    }
-  }
-
-  const updateData = {
+export const updateSale = async (id, data, user) => {
+  const sale = await SalesModel.findById(id);
+  if (!sale) throw new Error('Data tidak ditemukan');
+  if (user.role !== 'admin' && sale.namaCabang !== user.namaCabang) throw new Error('Akses ditolak');
+  
+  await SalesModel.findByIdAndUpdate(id, { 
     salesNo: data.salesNo, 
-    date: data.date,
-    remainingMoney: parseInt(data.remainingMoney) || 0,
-    expense: parseInt(data.expense) || 0,
-    totalAll: parseInt(data.totalAll) || 0,
-    serba35: parseInt(data.serba35) || 0,
-    serba50: parseInt(data.serba50) || 0,
-    serba75: parseInt(data.serba75) || 0,
-  };
-
-  await SalesModel.findByIdAndUpdate(id, updateData);
+    date: data.date, 
+    remainingMoney: parseInt(data.remainingMoney) || 0, 
+    expense: parseInt(data.expense) || 0, 
+    totalAll: parseInt(data.totalAll) || 0, 
+    serba35: parseInt(data.serba35) || 0, 
+    serba50: parseInt(data.serba50) || 0, 
+    serba75: parseInt(data.serba75) || 0 
+  });
+  
   return { message: 'Data penjualan berhasil diperbarui' };
 };
 
-export const deleteSale = async (id) => {
+export const deleteSale = async (id, user) => {
+  const sale = await SalesModel.findById(id);
+  if (!sale) throw new Error('Data tidak ditemukan');
+  if (user.role !== 'admin' && sale.namaCabang !== user.namaCabang) throw new Error('Akses ditolak');
   await SalesModel.findByIdAndDelete(id);
   return { message: 'Data penjualan berhasil dihapus' };
 };
 
-export const uploadSalesCsv = async (dataArray) => {
+export const uploadSalesCsv = async (dataArray, user) => {
   const results = [];
-  
-  for (const row of dataArray) {
-    try {
-      if (!row.salesNo) row.salesNo = await generateSalesNo();
-      
-      const created = await createSale(row); 
-      results.push({ error: false, message: 'Berhasil', data: created });
-    } catch (err) {
-      results.push({ error: true, message: err.message, data: row });
-    }
+  for (const row of dataArray) { 
+    try { 
+      results.push({ error: false, message: 'Berhasil', data: await createSale(row, user) }); 
+    } catch (err) { 
+      results.push({ error: true, message: err.message, data: row }); 
+    } 
   }
-  
   return { message: 'Proses upload selesai', results };
 };

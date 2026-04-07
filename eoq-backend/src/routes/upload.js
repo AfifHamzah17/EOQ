@@ -1,45 +1,83 @@
 import express from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
 import { authenticate } from '../middlewares/auth.js';
-import upload from '../middlewares/uploadMiddleware.js';
-import { uploadProfilePicture } from '../services/storage.service.js';
-import { UserModel } from '../models/UserModel.js'; // <--- GANTI: Pakai Model Mongoose
+import { UserModel } from '../models/UserModel.js';
 
 const router = express.Router();
-router.use(authenticate);
 
-// POST /api/upload/profile
-router.post('/profile', upload.single('avatar'), async (req, res, next) => {
+// Simpan di memory (RAM) sementara, biar sharp bisa baca buffer-nya
+const storage = multer.memoryStorage();
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Terima sampai 5MB, NANTI SHARP YANG KOMPRESI
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Hanya file gambar yang diizinkan!'), false);
+    }
+  }
+});
+
+router.post('/profile', authenticate, upload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: true, message: 'Tidak ada file yang diupload' });
+      return res.status(400).json({ error: true, message: 'Tidak ada file diupload' });
     }
 
-    const userId = req.user.userId; // UUID dari Token
-    const username = req.user.username; // Untuk nama file
-
-    // 1. AMBIL DATA USER SAAT INI
-    const user = await UserModel.findById(userId);
+    const userId = req.user.userId;
     
-    if (!user) {
-      return res.status(404).json({ error: true, message: 'User tidak ditemukan' });
+    // Cari user dulu untuk hapus foto lama (Opsional tapi bagus biar server nggak penuh)
+    const user = await UserModel.findById(userId);
+    if (user && user.avatarUrl) {
+      const oldFilename = path.basename(user.avatarUrl);
+      const oldPath = path.join(process.cwd(), 'public', 'uploads', 'avatars', oldFilename);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath); // Hapus foto lama
+      }
     }
 
-    const currentAvatarUrl = user.avatarUrl || null; // Ambil foto lama
+    // Nama file unik
+    const filename = `avatar-${userId}-${Date.now()}.jpg`;
+    const uploadPath = path.join(process.cwd(), 'public', 'uploads', 'avatars');
 
-    // 2. UPLOAD BARU (Lokal/Service)
-    const imageUrl = await uploadProfilePicture(req.file.buffer, username, currentAvatarUrl);
+    // Buat folder jika belum ada
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
 
-    // 3. UPDATE DATABASE (Mongoose)
-    user.avatarUrl = imageUrl;
-    await user.save();
+    const fullPath = path.join(uploadPath, filename);
 
-    res.json({ 
-      error: false, 
-      message: 'Foto profil berhasil diupdate', 
-      data: { avatarUrl: imageUrl } 
+    // PROSES SHARP: Crop 300x300, Kompresi ke JPEG Berkualitas Rendah (Ukuran pasti < 100KB)
+    await sharp(req.file.buffer)
+      .resize(300, 300, { 
+        fit: 'cover', // Memastikan gambar dipotong rapi menjadi persegi 1:1
+        position: 'center' 
+      })
+      .jpeg({ quality: 80, mozjpeg: true }) // Kompresi maksimal jadi JPEG
+      .toFile(fullPath);
+
+    // Sesuaikan URL (Gunakan req.hostname agar dinamis saat deploy, fallback localhost)
+    const baseUrl = process.env.BASE_URL || `http://${req.hostname}:${process.env.PORT || 3000}`;
+    const avatarUrl = `${baseUrl}/uploads/avatars/${filename}`;
+
+    // Update Database
+    await UserModel.findByIdAndUpdate(userId, { avatarUrl: avatarUrl });
+
+    res.status(200).json({
+      error: false,
+      message: 'Foto profil berhasil diubah',
+      data: { avatarUrl }
     });
-  } catch (error) {
-    next(error);
+
+  } catch (err) {
+    console.error('❌ Upload Error:', err.message);
+    // Kirim error yang jelas, biar frontend tau kenapa gagal
+    res.status(500).json({ error: true, message: err.message || 'Gagal memproses gambar di server' });
   }
 });
 

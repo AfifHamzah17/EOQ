@@ -1,26 +1,27 @@
-//src/models/UserModel.js
+// src/models/UserModel.js
 import mongoose from 'mongoose';
 
-const UserSchema = new mongoose.Schema({
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
+  noHp: { type: String, default: '', trim: true },
   passwordHash: { type: String, required: true },
-  name: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'karyawan'], default: 'karyawan' },
-  avatarUrl: { type: String, default: null },
-  createdAt: { type: Date, default: Date.now }
+  role: { type: String, enum: ['admin', 'user'], default: 'user' },
+  namaCabang: { type: String, required: true },
+  isApproved: { type: Boolean, default: false },
+  avatarUrl: { type: String, default: '' }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true }
 });
 
-// Virtual field 'id' agar mirip Firestore (front-end biasa pakai 'id')
-UserSchema.set('toJSON', {
-  virtuals: true,
-  transform: function (doc, ret) {
-    ret.id = ret._id;
-    delete ret._id;
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.passwordHash;
     delete ret.__v;
-    delete ret.passwordHash; // Jangan kirim password hash ke client
     return ret;
   }
 });
 
-export const UserModel = mongoose.model('User', UserSchema);
+export const UserModel = mongoose.model('User', userSchema);

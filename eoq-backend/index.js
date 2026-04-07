@@ -1,10 +1,10 @@
+// eoq-backend/index.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 // Utils & DB
 import { connectDB } from './src/utils/index.js';
@@ -27,11 +27,9 @@ const app = express();
 connectDB();
 
 // 1. Security
-app.use(helmet());
-
-// Static Folder untuk gambar (menggantikan GCS Public Access)
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // PENTING: Agar gambar avatar bisa diakses frontend
+}));
 
 // 2. CORS
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
@@ -61,7 +59,10 @@ app.use(limiter);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 5. Routes
+// 5. Static Folder untuk gambar (HANYA SATU, Pakai process.cwd() biar aman)
+app.use('/uploads', express.static(path.join(process.cwd(), 'public/uploads')));
+
+// 6. Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
@@ -73,18 +74,18 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/eoq', eoqRoutes); 
 app.use('/api/dashboard', dashboardRoutes);
 
-// 6. Health Check
+// 7. Health Check
 app.get('/', (req, res) => {
   res.json({ message: 'EOQ Backend Running (MongoDB)', status: 'OK' });
 });
 
-// 7. Error Handler
+// 8. Error Handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ error: true, message: err.message || 'Server Error' });
 });
 
-// 8. Start
+// 9. Start
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server berjalan di port ${PORT}`);
