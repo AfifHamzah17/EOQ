@@ -1,8 +1,9 @@
 // src/services/shipping.service.js
 import { ShippingModel } from '../models/ShippingModel.js';
-import { STORE_PREFIXES } from '../constants/storePrefixes.js'; 
+import { STORE_PREFIXES } from '../constants/storePrefixes.js';
 
 const getCabangFilter = (user) => user.role === 'admin' ? {} : { namaCabang: user.namaCabang };
+
 const generateShippingNo = async (cabang) => {
   const prefix = STORE_PREFIXES[cabang] || 'SHP';
   const last = await ShippingModel.findOne({ namaCabang: cabang }).sort({ createdAt: -1 });
@@ -50,7 +51,8 @@ export const uploadShippingCsv = async (dataArray, user) => {
 };
 
 export const bulkDeleteShippings = async (ids) => {
+  // FIX: Shipping.deleteMany diganti ShippingModel.deleteMany
   const result = await ShippingModel.deleteMany({ _id: { $in: ids } });
-  if (!result) throw new Error('Gagal menghapus data');
-  return { message: `${result.deletedCount} data pengiriman berhasil dihapus` };
+  if (result.deletedCount === 0) throw new Error('Tidak ada data yang berhasil dihapus.');
+  return { message: `Berhasil menghapus ${result.deletedCount} data pengiriman.` };
 };
