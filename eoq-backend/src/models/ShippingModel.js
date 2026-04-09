@@ -1,3 +1,4 @@
+// src/models/ShippingModel.js
 import mongoose from 'mongoose';
 
 const ShippingSchema = new mongoose.Schema({

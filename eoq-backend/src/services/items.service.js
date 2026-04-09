@@ -1,4 +1,5 @@
 //src/services/items.service.js
+import mongoose from 'mongoose';
 import { ItemModel, IncomingModel, OutgoingModel } from '../models/ItemModel.js';
 import { STORE_PREFIXES } from '../constants/storePrefixes.js'; 
 
@@ -89,7 +90,15 @@ export const getItems = async (user) => { return await ItemModel.find(getCabangF
 export const createItem = async (data) => { const code = await generateNextCode(data.namaCabang); return await ItemModel.create({ ...data, code, stock: parseInt(data.stock) || 0 }); };
 export const updateItem = async (id, data) => { await ItemModel.findByIdAndUpdate(id, { name: data.name, shopName: data.shopName, stock: parseInt(data.stock) }); return { message: 'Updated' }; };
 export const deleteItem = async (id) => { await ItemModel.findByIdAndDelete(id); return { message: 'Deleted' }; };
-
+export const bulkDeleteItems = async (ids) => {
+  const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));
+  const items = await ItemModel.find({ _id: { $in: objectIds } });
+  const codes = items.map(i => i.code);
+  await IncomingModel.deleteMany({ itemCode: { $in: codes } });
+  await OutgoingModel.deleteMany({ itemCode: { $in: codes } });
+  await ItemModel.deleteMany({ _id: { $in: objectIds } });
+  return { message: `${ids.length} barang dan riwayatnya berhasil dihapus` };
+};
 export const getInventoryReport = async (user) => {
   const filter = getCabangFilter(user);
   const items = await ItemModel.find(filter).sort({ createdAt: -1 });

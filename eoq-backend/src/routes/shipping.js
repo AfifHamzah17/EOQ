@@ -8,7 +8,8 @@ import {
   getShippingById,
   updateShipping, 
   deleteShipping, 
-  uploadShippingCsv 
+  uploadShippingCsv,
+  bulkDeleteShippings
 } from '../services/shipping.service.js';
 
 const router = express.Router();
@@ -87,4 +88,12 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
   }
 });
 
+router.post('/bulk-delete', checkRole(['admin', 'user']), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || ids.length === 0) return res.status(400).json({ error: true, message: 'Tidak ada item yang dipilih' });
+    const result = await bulkDeleteShippings(ids);
+    res.json({ error: false, ...result });
+  } catch (err) { res.status(500).json({ error: true, message: err.message }); }
+});
 export default router;

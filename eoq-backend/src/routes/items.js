@@ -11,13 +11,14 @@ import {
   processStockOut,
   getItemHistory,
   editTransaction,
-  getInventoryReport 
+  getInventoryReport,
+  bulkDeleteItems 
 } from '../services/items.service.js';
 
 const router = express.Router();
 router.use(authenticate);
 
-router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.get('/', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const items = await getItems(req.user);
     res.json({ error: false, data: items });
@@ -27,7 +28,7 @@ router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-router.get('/report', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.get('/report', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const reportData = await getInventoryReport(req.user);
     res.json({ error: false, data: reportData });
@@ -37,7 +38,7 @@ router.get('/report', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-router.get('/history/:code', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.get('/history/:code', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const history = await getItemHistory(req.params.code, req.user);
     res.json({ error: false, data: history });
@@ -48,7 +49,7 @@ router.get('/history/:code', checkRole(['admin', 'karyawan']), async (req, res) 
 });
 
 // UPLOAD BARANG MASUK
-router.post('/upload/in', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.post('/upload/in', checkRole(['admin', 'user']), async (req, res) => {
   try {
     console.log("DATA MASUK DARI FRONTEND:", JSON.stringify(req.body)); // DEBUG
     const inputData = Array.isArray(req.body) ? req.body : [req.body];
@@ -69,7 +70,7 @@ router.post('/upload/in', checkRole(['admin', 'karyawan']), async (req, res) => 
 });
 
 // UPLOAD BARANG KELUAR
-router.post('/upload/out', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.post('/upload/out', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const inputData = Array.isArray(req.body) ? req.body : [req.body];
     const results = [];
@@ -89,7 +90,7 @@ router.post('/upload/out', checkRole(['admin', 'karyawan']), async (req, res) =>
 });
 
 // ROUTE EDIT TRANSAKSI
-router.put('/transaction/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.put('/transaction/:id', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const collectionType = req.body.type === 'in' ? 'incoming' : 'outgoing';
     await editTransaction(req.params.id, req.body, collectionType);
@@ -100,7 +101,7 @@ router.put('/transaction/:id', checkRole(['admin', 'karyawan']), async (req, res
   }
 });
 
-router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.post('/', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const newItem = await createItem(req.body);
     res.status(201).json({ error: false, data: newItem });
@@ -110,7 +111,7 @@ router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
   }
 });
 
-router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.put('/:id', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const result = await updateItem(req.params.id, req.body);
     res.json({ error: false, message: result.message });
@@ -130,4 +131,12 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
   }
 });
 
+router.post('/bulk-delete', checkRole(['admin', 'user']), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || ids.length === 0) return res.status(400).json({ error: true, message: 'Tidak ada item yang dipilih' });
+    const result = await bulkDeleteItems(ids);
+    res.json({ error: false, ...result });
+  } catch (err) { res.status(500).json({ error: true, message: err.message }); }
+});
 export default router;

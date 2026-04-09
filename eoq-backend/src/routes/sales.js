@@ -8,14 +8,15 @@ import {
   getSaleById,
   updateSale, 
   deleteSale, 
-  uploadSalesCsv 
+  uploadSalesCsv ,
+  bulkDeleteSales
 } from '../services/sales.service.js';
 
 const router = express.Router();
 router.use(authenticate);
 
 // 1. GET ALL
-router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.get('/', checkRole(['admin', 'user']), async (req, res) => {
   try {
     // Kirim req.user
     const sales = await getAllSales(req.user);
@@ -26,7 +27,7 @@ router.get('/', checkRole(['admin', 'karyawan']), async (req, res) => {
 });
 
 // 2. CREATE
-router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.post('/', checkRole(['admin', 'user']), async (req, res) => {
   try {
     // Kirim req.user
     const newSale = await createSale(req.body, req.user);
@@ -40,7 +41,7 @@ router.post('/', checkRole(['admin', 'karyawan']), async (req, res) => {
 });
 
 // 3. UPLOAD CSV
-router.post('/upload', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.post('/upload', checkRole(['admin', 'user']), async (req, res) => {
   try {
     const dataArray = req.body;
     if (!Array.isArray(dataArray)) return res.status(400).json({ error: true, message: 'Format data harus array' });
@@ -54,7 +55,7 @@ router.post('/upload', checkRole(['admin', 'karyawan']), async (req, res) => {
 });
 
 // 4. GET BY ID
-router.get('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.get('/:id', checkRole(['admin', 'user']), async (req, res) => {
   try {
     // Kirim req.user
     const item = await getSaleById(req.params.id, req.user);
@@ -65,7 +66,7 @@ router.get('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
 });
 
 // 5. UPDATE
-router.put('/:id', checkRole(['admin', 'karyawan']), async (req, res) => {
+router.put('/:id', checkRole(['admin', 'user']), async (req, res) => {
   try {
     // Kirim req.user
     const result = await updateSale(req.params.id, req.body, req.user);
@@ -87,6 +88,15 @@ router.delete('/:id', checkRole(['admin']), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: true, message: err.message });
   }
+});
+
+router.post('/bulk-delete', checkRole(['admin', 'user']), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || ids.length === 0) return res.status(400).json({ error: true, message: 'Tidak ada item yang dipilih' });
+    const result = await bulkDeleteSales(ids);
+    res.json({ error: false, ...result });
+  } catch (err) { res.status(500).json({ error: true, message: err.message }); }
 });
 
 export default router;

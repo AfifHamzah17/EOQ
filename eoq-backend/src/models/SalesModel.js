@@ -1,3 +1,4 @@
+// src/models/SalesModel.js
 import mongoose from 'mongoose';
 
 const SalesSchema = new mongoose.Schema({
